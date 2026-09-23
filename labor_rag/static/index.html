@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="hy">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Աշխատանքային օրենսգիրք</title>
+<style>
+:root {
+  --bg: #f6f5f2; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6a66;
+  --border: #e2e0da; --accent: #1f5f8b; --accent-soft: #e5eef5;
+  --mark: #fff1b8; --danger: #a33a2c; --radius: 10px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #161615; --panel: #1f1f1e; --text: #ecebe7; --muted: #9c9a94;
+    --border: #33322f; --accent: #7fb6de; --accent-soft: #1f3342;
+    --mark: #5a4a12; --danger: #e08070;
+  }
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+  background: var(--bg); color: var(--text);
+  font: 16px/1.55 system-ui, -apple-system, "Segoe UI", "Noto Sans Armenian", sans-serif;
+}
+button, input, textarea { font: inherit; color: inherit; }
+.wrap { max-width: 860px; margin: 0 auto; padding: 0 16px; }
+header { border-bottom: 1px solid var(--border); background: var(--panel); }
+header .wrap { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; padding-block: 14px; }
+h1 { font-size: 1.15rem; margin: 0; }
+.meta { color: var(--muted); font-size: .85rem; }
+.tabs { display: flex; gap: 4px; margin: 20px 0 12px; flex-wrap: wrap; }
+.tab {
+  border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
+  padding: 6px 14px; cursor: pointer;
+}
+.tab[aria-selected="true"] { background: var(--accent); border-color: var(--accent); color: var(--panel); }
+form.ask { display: flex; gap: 8px; align-items: flex-end; }
+form.ask textarea, form.ask input {
+  flex: 1; min-width: 0; resize: vertical; min-height: 48px; max-height: 240px;
+  padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel);
+}
+form.ask textarea:focus, form.ask input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+.btn {
+  border: 0; border-radius: var(--radius); background: var(--accent); color: var(--panel);
+  padding: 12px 18px; cursor: pointer; font-weight: 600; white-space: nowrap;
+}
+.btn:disabled { opacity: .5; cursor: default; }
+.link { background: none; border: 0; padding: 0; color: var(--accent); cursor: pointer; text-decoration: underline; }
+.hint { color: var(--muted); font-size: .85rem; margin: 8px 0 0; }
+.examples { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.chip {
+  border: 1px solid var(--border); background: var(--panel); border-radius: 999px;
+  padding: 4px 12px; font-size: .85rem; cursor: pointer; color: var(--muted);
+}
+.chip:hover { color: var(--text); border-color: var(--accent); }
+.banner {
+  border: 1px solid var(--border); border-left: 4px solid var(--danger); background: var(--panel);
+  padding: 10px 14px; border-radius: var(--radius); margin-top: 16px; font-size: .9rem;
+}
+#feed { margin: 20px 0 60px; display: flex; flex-direction: column; gap: 16px; }
+.card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
+.q { font-weight: 600; margin-bottom: 10px; }
+.answer p { margin: .5em 0; }
+.answer ul, .answer ol { padding-left: 1.4em; margin: .5em 0; }
+.answer h3, .answer h4 { margin: .8em 0 .3em; font-size: 1rem; }
+sup.cite button {
+  font-size: .7rem; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft);
+  border-radius: 4px; padding: 0 4px; margin: 0 1px; cursor: pointer; line-height: 1.4;
+}
+.section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
+.sources { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.sources li { border-left: 3px solid var(--border); padding: 4px 10px; font-size: .9rem; }
+.sources li.flash { border-left-color: var(--accent); background: var(--accent-soft); }
+.sources .quote { color: var(--muted); }
+details.hits summary { cursor: pointer; color: var(--muted); font-size: .9rem; margin-top: 12px; }
+.hit { border-top: 1px solid var(--border); padding: 10px 0; }
+.hit:first-of-type { border-top: 0; }
+.hit .h { font-weight: 600; }
+.hit .c { color: var(--muted); font-size: .85rem; }
+.hit .snip { font-size: .92rem; margin-top: 4px; }
+.loading { color: var(--muted); display: flex; align-items: center; gap: 8px; }
+.spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.error { color: var(--danger); }
+.disclaimer { color: var(--muted); font-size: .8rem; margin-top: 12px; }
+
+/* Article drawer */
+#drawer {
+  position: fixed; inset: 0 0 0 auto; width: min(560px, 100%); background: var(--panel);
+  border-left: 1px solid var(--border); box-shadow: -8px 0 24px rgba(0,0,0,.12);
+  transform: translateX(100%); transition: transform .2s ease; display: flex; flex-direction: column; z-index: 10;
+}
+#drawer.open { transform: none; }
+#drawer header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; padding: 14px 16px; }
+#drawer .body { overflow: auto; padding: 16px; white-space: pre-wrap; }
+#drawer .close { background: none; border: 0; font-size: 1.4rem; cursor: pointer; color: var(--muted); line-height: 1; }
+mark { background: var(--mark); color: inherit; border-radius: 2px; }
+@media (max-width: 560px) {
+  form.ask { flex-direction: column; align-items: stretch; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>ՀՀ աշխատանքային օրենսգիրք</h1>
+    <span class="meta" id="meta">…</span>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-mode="ask" aria-selected="true">Հարցնել · Ask</button>
+    <button class="tab" role="tab" data-mode="search" aria-selected="false">Որոնել · Search</button>
+    <button class="tab" role="tab" data-mode="article" aria-selected="false">Հոդված · Article</button>
+  </div>
+
+  <form class="ask" id="form" autocomplete="off">
+    <textarea id="q" rows="2" placeholder="Գրեք ձեր հարցը… / Ask in Armenian, English or Russian"></textarea>
+    <button class="btn" id="go" type="submit">Ուղարկել</button>
+  </form>
+  <p class="hint" id="hint">Enter՝ ուղարկել, Shift+Enter՝ նոր տող</p>
+  <div class="examples" id="examples"></div>
+  <div id="banner"></div>
+
+  <div id="feed" aria-live="polite"></div>
+</main>
+
+<aside id="drawer" aria-hidden="true">
+  <header>
+    <div><div class="h" id="d-title" style="font-weight:600"></div><div class="meta" id="d-sub"></div></div>
+    <button class="close" id="d-close" aria-label="Close">×</button>
+  </header>
+  <div class="body" id="d-body"></div>
+</aside>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const feed = $("#feed"), q = $("#q"), form = $("#form"), go = $("#go");
+let mode = "ask", llmAvailable = true, history = [];
+
+const EXAMPLES = {
+  ask: [
+    "Քանի՞ օր է ամենամյա նվազագույն արձակուրդը",
+    "Որքա՞ն ժամկետ առաջ պետք է գործատուն ծանուցի աշխատանքից ազատելու մասին",
+    "How is overtime work paid?",
+    "Какова продолжительность испытательного срока?",
+  ],
+  search: ["փորձաշրջան", "արտաժամյա աշխատանք", "նվազագույն աշխատավարձ", "կարգապահական տույժ"],
+  article: ["113", "139", "159"],
+};
+const PLACEHOLDER = {
+  ask: "Գրեք ձեր հարցը… / Ask in Armenian, English or Russian",
+  search: "Որոնման բառեր հայերենով…",
+  article: "Հոդվածի համար, օր.՝ 139",
+};
+const BUTTON = { ask: "Ուղարկել", search: "Որոնել", article: "Բացել" };
+
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// Tiny Markdown subset: headings, lists, bold/italic, paragraphs, citation markers.
+function renderAnswer(md, cardId) {
+  const inline = (s) => esc(s)
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
+    .replace(/((?:\[\d+\])+)/g, (m) =>
+      '<sup class="cite">' + m.match(/\d+/g).map((n) =>
+        `<button type="button" data-card="${cardId}" data-n="${n}">${n}</button>`).join("") + "</sup>");
+  const out = [];
+  let list = null;
+  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
+  for (const raw of md.split("\n")) {
+    const line = raw.trimEnd();
+    let m;
+    if (!line.trim()) { close(); continue; }
+    if ((m = line.match(/^#{1,6}\s+(.*)/))) { close(); out.push(`<h4>${inline(m[1])}</h4>`); continue; }
+    if ((m = line.match(/^\s*[-*•]\s+(.*)/))) {
+      if (list !== "ul") { close(); out.push("<ul>"); list = "ul"; }
+      out.push(`<li>${inline(m[1])}</li>`); continue;
+    }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) {
+      if (list !== "ol") { close(); out.push("<ol>"); list = "ol"; }
+      out.push(`<li>${inline(m[1])}</li>`); continue;
+    }
+    close(); out.push(`<p>${inline(line)}</p>`);
+  }
+  close();
+  return out.join("");
+}
+
+function hitsHtml(hits, open = false) {
+  if (!hits.length) return '<p class="meta">Համապատասխան հոդվածներ չեն գտնվել։</p>';
+  return `<details class="hits"${open ? " open" : ""}><summary>Գտնված հոդվածներ (${hits.length})</summary>` +
+    hits.map((h) => `<div class="hit">
+      <button type="button" class="link h" data-article="${esc(h.article || "")}">${esc(h.heading)}</button>
+      ${h.chapter ? `<div class="c">${esc(h.chapter)}</div>` : ""}
+      <div class="snip">${esc(h.text.slice(0, 260))}${h.text.length > 260 ? "…" : ""}</div>
+    </div>`).join("") + "</details>";
+}
+
+function addCard(title) {
+  const card = document.createElement("div");
+  card.className = "card";
+  card.id = "c" + Date.now() + Math.random().toString(16).slice(2, 6);
+  card.innerHTML = `<div class="q">${esc(title)}</div><div class="loading"><span class="spinner"></span><span>Որոնում եմ…</span></div>`;
+  feed.prepend(card);
+  return card;
+}
+
+async function api(path, body) {
+  const res = await fetch(path, body ? {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  } : undefined);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : res.statusText);
+  return data;
+}
+
+async function doAsk(text) {
+  const card = addCard(text);
+  card.querySelector(".loading span:last-child").textContent = "Պատասխանը պատրաստվում է…";
+  try {
+    const data = await api("/api/ask", { question: text, history });
+    card.citations = data.citations;
+    const sources = data.citations.length ? `<div class="section-title">Աղբյուրներ</div><ul class="sources">` +
+      data.citations.map((c) => `<li data-n="${c.n}">[${c.n}]
+        <button type="button" class="link" data-article="${esc(c.article || "")}" data-quote="${esc(c.text)}">${esc(c.heading)}</button>
+        <span class="quote">— «${esc(c.text.length > 220 ? c.text.slice(0, 220) + "…" : c.text)}»</span></li>`).join("") + "</ul>" : "";
+    card.innerHTML = `<div class="q">${esc(text)}</div>
+      <div class="answer">${renderAnswer(data.answer, card.id)}</div>
+      ${sources}${hitsHtml(data.hits)}
+      <p class="disclaimer">Տեղեկատվական նպատակով է, իրավաբանական խորհրդատվություն չէ։ Ստուգեք arlis.am-ի պաշտոնական տեքստով։</p>`;
+    history.push({ role: "user", content: text }, { role: "assistant", content: data.answer });
+    history = history.slice(-12);
+  } catch (e) {
+    card.innerHTML = `<div class="q">${esc(text)}</div><p class="error">${esc(e.message)}</p>`;
+  }
+}
+
+async function doSearch(text) {
+  const card = addCard(text);
+  try {
+    const data = await api("/api/search", { query: text, k: 10 });
+    card.innerHTML = `<div class="q">${esc(text)}</div>${hitsHtml(data.hits, true)}`;
+  } catch (e) {
+    card.innerHTML = `<div class="q">${esc(text)}</div><p class="error">${esc(e.message)}</p>`;
+  }
+}
+
+async function openArticle(number, quote) {
+  if (!number) return;
+  $("#d-title").textContent = "Հոդված " + number;
+  $("#d-sub").textContent = "";
+  $("#d-body").textContent = "…";
+  $("#drawer").classList.add("open");
+  $("#drawer").setAttribute("aria-hidden", "false");
+  try {
+    const { chunks } = await api("/api/article/" + encodeURIComponent(number));
+    const c = chunks[0];
+    $("#d-title").textContent = c.heading.replace(/ \(մաս \d+\)$/, "");
+    $("#d-sub").textContent = [c.section, c.chapter].filter(Boolean).join(" · ");
+    let html = esc(chunks.map((x) => x.text).join("\n"));
+    if (quote) {
+      const qEsc = esc(quote.trim());
+      const i = html.indexOf(qEsc);
+      if (i >= 0) html = html.slice(0, i) + "<mark>" + qEsc + "</mark>" + html.slice(i + qEsc.length);
+    }
+    $("#d-body").innerHTML = html;
+    const m = $("#d-body mark");
+    if (m) m.scrollIntoView({ block: "center" }); else $("#d-body").scrollTop = 0;
+  } catch (e) {
+    $("#d-body").innerHTML = `<p class="error">${esc(e.message)}</p>`;
+  }
+}
+
+function closeDrawer() {
+  $("#drawer").classList.remove("open");
+  $("#drawer").setAttribute("aria-hidden", "true");
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", t.dataset.mode === m));
+  q.placeholder = PLACEHOLDER[m];
+  go.textContent = BUTTON[m];
+  $("#hint").style.display = m === "ask" ? "" : "none";
+  $("#examples").innerHTML = EXAMPLES[m].map((e) => `<button type="button" class="chip">${esc(e)}</button>`).join("");
+  q.focus();
+}
+
+async function submit() {
+  const text = q.value.trim();
+  if (!text) return;
+  go.disabled = true;
+  try {
+    if (mode === "ask") { q.value = ""; await doAsk(text); }
+    else if (mode === "search") await doSearch(text);
+    else await openArticle(text.replace(/\D*(\d+(?:\.\d+)*).*/, "$1"));
+  } finally { go.disabled = false; }
+}
+
+form.addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+q.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); submit(); }
+});
+document.querySelectorAll(".tab").forEach((t) => t.addEventListener("click", () => setMode(t.dataset.mode)));
+$("#examples").addEventListener("click", (e) => {
+  if (e.target.classList.contains("chip")) { q.value = e.target.textContent; submit(); }
+});
+$("#d-close").addEventListener("click", closeDrawer);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
+
+// Citation markers flash their source line; article links open the drawer.
+feed.addEventListener("click", (e) => {
+  const cite = e.target.closest("sup.cite button");
+  if (cite) {
+    const card = document.getElementById(cite.dataset.card);
+    const li = card.querySelector(`.sources li[data-n="${cite.dataset.n}"]`);
+    const c = (card.citations || []).find((x) => String(x.n) === cite.dataset.n);
+    if (li) { li.classList.add("flash"); setTimeout(() => li.classList.remove("flash"), 1500); }
+    if (c) openArticle(c.article, c.text);
+    return;
+  }
+  const link = e.target.closest("[data-article]");
+  if (link) openArticle(link.dataset.article, link.dataset.quote);
+});
+
+(async () => {
+  try {
+    const info = await api("/api/info");
+    $("#meta").textContent = `${info.articles} հոդված` + (info.version ? ` · խմբագրություն ${info.version}` : "");
+    llmAvailable = info.llm;
+    if (!llmAvailable) {
+      $("#banner").innerHTML = `<div class="banner">ANTHROPIC_API_KEY-ը կարգավորված չէ․ հասանելի է միայն որոնումը։
+        Set ANTHROPIC_API_KEY on the server to enable answers.</div>`;
+      setMode("search");
+      return;
+    }
+  } catch (e) {
+    $("#banner").innerHTML = `<div class="banner">${esc(e.message)}</div>`;
+  }
+  setMode("ask");
+})();
+</script>
+</body>
+</html>

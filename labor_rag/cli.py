@@ -111,6 +111,14 @@ def cmd_chat(args: argparse.Namespace) -> None:
         history = history[-12:]
 
 
+def cmd_serve(args: argparse.Namespace) -> None:
+    try:
+        from .web import serve
+    except ImportError:
+        sys.exit('The web interface needs extra packages: pip install -e ".[web]"')
+    serve(args.index, host=args.host, port=args.port)
+
+
 def main(argv: list[str] | None = None) -> None:
     p = argparse.ArgumentParser(
         prog="labor-rag", description="RAG over the Labor Code of the Republic of Armenia"
@@ -145,6 +153,11 @@ def main(argv: list[str] | None = None) -> None:
         s.add_argument("-k", type=int, default=8, help="articles to retrieve")
         s.add_argument("--no-rewrite", action="store_true", help="skip Claude query rewriting")
         s.set_defaults(func=func)
+
+    s = sub.add_parser("serve", help="start the web interface")
+    s.add_argument("--host", default="127.0.0.1", help="use 0.0.0.0 to allow other machines")
+    s.add_argument("--port", type=int, default=8000)
+    s.set_defaults(func=cmd_serve)
 
     args = p.parse_args(argv)
     try:

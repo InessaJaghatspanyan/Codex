@@ -56,6 +56,7 @@ class SearchPlan(BaseModel):
 class Citation:
     article_heading: str
     cited_text: str
+    document_index: int = -1
 
 
 @dataclass
@@ -152,7 +153,7 @@ def answer(question: str, hits: list[Hit], history: list[dict] | None = None) ->
         marks = []
         for cit in getattr(block, "citations", None) or []:
             heading = getattr(cit, "document_title", None) or titles[cit.document_index]
-            citations.append(Citation(heading, cit.cited_text))
+            citations.append(Citation(heading, cit.cited_text, cit.document_index))
             marks.append(len(citations))
         if marks:
             parts.append("".join(f"[{n}]" for n in marks))

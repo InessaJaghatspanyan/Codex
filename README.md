@@ -76,6 +76,29 @@ labor-rag article 139
 
 `python -m labor_rag ...` works the same way.
 
+### Web interface
+
+```bash
+pip install -e ".[web]"
+labor-rag serve                   # http://127.0.0.1:8000/
+labor-rag serve --host 0.0.0.0    # reachable from other machines on your network
+```
+
+A single page with three modes:
+
+- **Հարցնել · Ask:** questions in any language, answered with numbered citations.
+  Click a citation to open the article with the quoted sentence highlighted.
+  Follow-up questions keep the conversation context.
+- **Որոնել · Search:** retrieval only, with no LLM call.
+- **Հոդված · Article:** open any article by number.
+
+If no Anthropic credentials are configured, the page opens in Search mode and says so.
+The JSON API it uses is also available directly: `POST /api/ask`, `POST /api/search`,
+`GET /api/article/{number}`, `GET /api/info`.
+
+The server has no authentication. Before exposing it beyond your own network, put it
+behind a login, because every question costs Anthropic API usage.
+
 ## Configuration
 
 | Env var | Default | Purpose |
@@ -96,7 +119,9 @@ if the primary model declines a request, the API reruns it on a fallback model.
 labor_rag/parser.py   file loading + article/chapter/section splitting
 labor_rag/index.py    BM25 + char n-gram TF-IDF + optional Voyage, RRF fusion, persistence
 labor_rag/llm.py      Claude: query rewriting (structured output) and cited answers
-labor_rag/cli.py      ingest / search / article / ask / chat
+labor_rag/cli.py      ingest / search / article / ask / chat / serve
+labor_rag/web.py      FastAPI server for the web interface
+labor_rag/static/     the web page (plain HTML/CSS/JS, no build step)
 tests/                unit tests on a synthetic fixture (not real law text)
 ```
 

@@ -20,10 +20,14 @@ dependencies = [
 
 [project.optional-dependencies]
 voyage = ["voyageai>=0.3"]
-dev = ["pytest>=8"]
+web = ["fastapi>=0.110", "uvicorn>=0.29"]
+dev = ["pytest>=8", "httpx>=0.27", "fastapi>=0.110", "uvicorn>=0.29"]
 
 [project.scripts]
 labor-rag = "labor_rag.cli:main"
 
 [tool.setuptools]
 packages = ["labor_rag"]
+
+[tool.setuptools.package-data]
+labor_rag = ["static/*"]
