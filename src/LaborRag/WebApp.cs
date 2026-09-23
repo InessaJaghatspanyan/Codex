@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.RateLimiting;
 using Anthropic;
 using Anthropic.Exceptions;
@@ -213,8 +214,44 @@ public static class WebApp
         }
         catch (AnthropicApiException e)
         {
-            logs.CreateLogger("ask").LogError(e, "Anthropic API error");
-            return Error(502, "The Anthropic API returned an error; try again shortly.");
+            logs.CreateLogger("ask").LogError(e, "Anthropic API error {Status}: {Body}", (int)e.StatusCode, e.ResponseBody);
+            return Error(502, DescribeApiError(e));
         }
+        catch (AnthropicException e)
+        {
+            logs.CreateLogger("ask").LogError(e, "Anthropic SDK error");
+            return Error(502, $"Could not get an answer from the Anthropic API: {e.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Turns an API error into a message the site owner can act on. Anthropic's error
+    /// messages (e.g. "Your credit balance is too low") contain no secrets, so they are shown.
+    /// </summary>
+    public static string DescribeApiError(AnthropicApiException e)
+    {
+        var apiMessage = "";
+        try
+        {
+            using var doc = JsonDocument.Parse(e.ResponseBody ?? "");
+            if (doc.RootElement.TryGetProperty("error", out var err) && err.TryGetProperty("message", out var m))
+                apiMessage = m.GetString() ?? "";
+        }
+        catch (JsonException)
+        {
+        }
+        var status = (int)e.StatusCode;
+        var hint = e switch
+        {
+            _ when apiMessage.Contains("credit balance", StringComparison.OrdinalIgnoreCase) =>
+                "The Anthropic account has no credits left. Add credits at console.anthropic.com → Settings → Billing.",
+            AnthropicNotFoundException =>
+                "The model is not available to this API key. Check LABOR_RAG_MODEL in the server settings.",
+            AnthropicForbiddenException =>
+                "This API key is not allowed to use the requested model or feature.",
+            Anthropic5xxException => "The Anthropic API is having problems; try again in a minute.",
+            _ => "The Anthropic API rejected the request.",
+        };
+        return apiMessage.Length > 0 ? $"{hint} (Anthropic {status}: {apiMessage})" : $"{hint} (Anthropic {status})";
     }
 }
