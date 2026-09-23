@@ -38,14 +38,12 @@ The repo includes a `Dockerfile` and a `render.yaml` Blueprint. The Docker build
    from console.anthropic.com.
 3. Click **Apply**. The first build takes a few minutes. The site is then live at
    `https://labor-code-ra.onrender.com`, or a similar name if that one is taken.
-4. In the service's **Environment** tab, open **`ACCESS_CODE`**. Render generated a random
-   one, which you can replace with something easier to share. Give this code to the people
-   who should be able to ask questions.
 
-Search and article lookup are open to everyone; asking Claude requires the access code.
-Each IP address can ask 10 questions a minute and try the code 10 times every 5 minutes.
-`DAILY_QUESTION_LIMIT` (default 200) caps the total number of questions per day, which
-bounds your Anthropic costs.
+Anyone with the link can search, read articles and ask questions. Each IP address can ask
+10 questions a minute, and `DAILY_QUESTION_LIMIT` (default 200) caps the total number of
+questions per day, which bounds your Anthropic costs. To restrict questions to people you
+choose, set an `ACCESS_CODE` in the service's **Environment** tab; the page then asks
+for that code before answering.
 
 The free Render plan sleeps after 15 minutes without traffic, so the first visit after a
 pause takes about a minute. The paid Starter plan keeps it running. Pushing to the
@@ -85,7 +83,7 @@ and push. Render then rebuilds the index. Local runs need `laborrag ingest data/
 | Env var | Default | Purpose |
 |---|---|---|
 | `ANTHROPIC_API_KEY` | none | Required for answers; without it only search works |
-| `ACCESS_CODE` | unset (open) | Code required to ask questions in the web interface |
+| `ACCESS_CODE` | unset (open) | Optional code required to ask questions in the web interface |
 | `DAILY_QUESTION_LIMIT` | `200` | Maximum questions per UTC day (cost guard) |
 | `LABOR_RAG_MODEL` | `claude-opus-5` | Model that writes answers |
 | `LABOR_RAG_REWRITE_MODEL` | same as above | Model that rewrites queries (a cheaper model works well here) |

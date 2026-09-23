@@ -9,8 +9,6 @@ services:
     envVars:
       - key: ANTHROPIC_API_KEY
         sync: false # you paste your key in the Render dashboard
-      - key: ACCESS_CODE
-        generateValue: true # random code; view or change it in the dashboard
       - key: DAILY_QUESTION_LIMIT
         value: "200"
       - key: LABOR_RAG_MODEL
