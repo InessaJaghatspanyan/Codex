@@ -33,7 +33,7 @@ export ANTHROPIC_API_KEY=...        # or `ant auth login`
 
 ## 1. Get the text of the Code
 
-This repo does **not** include the Code's text. Download the current consolidated
+To update or replace the text, download the current consolidated
 version from the official legal information system **arlis.am** (search for
 «Աշխատանքային օրենսգիրք»), then save the page as HTML, or download the DOCX/PDF, into
 `data/raw/`. `.txt`, `.html`, `.pdf` and `.docx` are all supported.
