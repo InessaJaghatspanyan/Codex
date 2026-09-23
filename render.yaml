@@ -1,0 +1,17 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: labor-code-ra
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/info
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false # you paste your key in the Render dashboard
+      - key: ACCESS_CODE
+        generateValue: true # random code; view or change it in the dashboard
+      - key: DAILY_QUESTION_LIMIT
+        value: "200"
+      - key: LABOR_RAG_MODEL
+        value: claude-opus-5
