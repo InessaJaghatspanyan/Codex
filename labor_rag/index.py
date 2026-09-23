@@ -1,4 +1,5 @@
-"""Hybrid retriever: BM25 over words + TF-IDF over character n-grams (+ optional dense).
+"""Hybrid retriever: BM25 over words, TF-IDF over character n-grams of the article
+text and of article titles, plus optional dense embeddings.
 
 Armenian is highly inflected (աշխատող, աշխատողի, աշխատողների, ...), so exact word
 matching alone misses a lot. Character n-grams inside word boundaries absorb
@@ -79,6 +80,12 @@ class Index:
             analyzer="char_wb", ngram_range=(3, 5), lowercase=True, sublinear_tf=True
         )
         self.char_mat = self.char_vec.fit_transform(texts)
+        # Article titles are short and precise; ranking them separately keeps a
+        # matching title from being drowned out by long, term-heavy articles.
+        self.title_vec = TfidfVectorizer(
+            analyzer="char_wb", ngram_range=(3, 5), lowercase=True, sublinear_tf=True
+        )
+        self.title_mat = self.title_vec.fit_transform([c.title for c in chunks])
         self.embeddings = embeddings
         self.by_article: dict[str, list[int]] = {}
         for i, c in enumerate(chunks):
@@ -125,6 +132,7 @@ class Index:
         for q in queries:
             add(self.bm25.scores(tokenize(q)))
             add((self.char_mat @ self.char_vec.transform([q]).T).toarray().ravel())
+            add((self.title_mat @ self.title_vec.transform([q]).T).toarray().ravel())
         if self.embeddings is not None:
             qv = embed_queries(queries)
             if qv is not None:

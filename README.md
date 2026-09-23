@@ -38,6 +38,12 @@ version from the official legal information system **arlis.am** (search for
 «Աշխատանքային օրենսգիրք»), then save the page as HTML, or download the DOCX/PDF, into
 `data/raw/`. `.txt`, `.html`, `.pdf` and `.docx` are all supported.
 
+The repo currently has `data/raw/150003.pdf`: the arlis.am/IRTEK PDF of the version
+valid **10.07.2026 – 01.01.2027**, which parses into 288 articles (1–266 plus inserted
+articles such as 3.1). The PDF loader strips the running page footers and page
+numbers, moves the first-page metadata box (adoption and entry-into-force dates)
+to the preamble, and rejoins hard-wrapped lines.
+
 > The Code has been amended many times. Re-download and re-ingest after amendments,
 > and check which version your answers came from.
 
@@ -45,7 +51,7 @@ version from the official legal information system **arlis.am** (search for
 
 ```bash
 labor-rag ingest data/raw/
-# Parsed 290 chunks covering 270 articles.   (numbers depend on your source)
+# Parsed 291 chunks covering 288 articles.
 ```
 
 If `VOYAGE_API_KEY` is set and the `voyage` extra is installed, dense embeddings

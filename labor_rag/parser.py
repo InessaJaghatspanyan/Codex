@@ -70,7 +70,7 @@ def load_text(path: Path) -> str:
     if suffix == ".pdf":
         from pypdf import PdfReader
 
-        return "\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+        return clean_pdf_pages([page.extract_text() or "" for page in PdfReader(path).pages])
     if suffix == ".docx":
         import docx
 
@@ -78,8 +78,68 @@ def load_text(path: Path) -> str:
     raise ValueError(f"Unsupported file type: {path}")
 
 
+# Metadata box that arlis.am/IRTEK PDFs print on the first page (adoption, signing,
+# entry-into-force dates). It lands mid-article, so it is moved to the preamble.
+PDF_METADATA_RE = re.compile(
+    r"^(?:ՀՀ Ազգային Ժողով|Ընդունվել է\.|Ստորագրվել է\.|ՈՒժի մեջ է մտել\.|Ուժի մեջ է մտել\.)"
+)
+# A line that starts a new logical line in hard-wrapped PDF text.
+LINE_START_RE = re.compile(
+    r"^(?:\d+(?:\.\d+)*[.)]\s|\d+(?:\.\d+)*\)|\(|Հոդված\s|ԳԼՈՒԽ\s|ԲԱԺԻՆ\s)"
+)
+
+
+def _norm_line(line: str) -> str:
+    return re.sub(r"\s+", " ", line.replace(" ", " ")).strip()
+
+
+def clean_pdf_pages(pages: list[str]) -> str:
+    """Remove running headers/footers and page numbers, then undo hard line wraps."""
+    page_lines = [[_norm_line(ln) for ln in p.split("\n")] for p in pages]
+    # Lines repeated on most pages (digits masked) are running headers/footers.
+    counts: dict[str, int] = {}
+    for lines in page_lines:
+        for key in {re.sub(r"\d", "#", ln) for ln in lines if ln}:
+            counts[key] = counts.get(key, 0) + 1
+    threshold = max(3, len(pages) // 2)
+    boilerplate = {k for k, n in counts.items() if n >= threshold}
+
+    body: list[str] = []
+    metadata: list[str] = []
+    for lines in page_lines:
+        while lines and (not lines[-1] or lines[-1].isdigit()):
+            lines = lines[:-1]  # trailing page number
+        for ln in lines:
+            if re.sub(r"\d", "#", ln) in boilerplate:
+                continue
+            if PDF_METADATA_RE.match(ln):
+                metadata.append(ln)
+                continue
+            body.append(ln)
+
+    # Blank lines separate blocks (headings, articles); within a block, join wrapped
+    # lines unless the next one starts a numbered part, a note, or a heading.
+    out: list[str] = []
+    joinable = False
+    for ln in body:
+        if not ln:
+            out.append("")
+            joinable = False
+        elif joinable and not LINE_START_RE.match(ln):
+            out[-1] += " " + ln
+        else:
+            out.append(ln)
+            joinable = True
+    head = [out.pop(0)] if out and re.fullmatch(r"[\d. -]+", out[0]) else []
+    return "\n".join(head + metadata + out)
+
+
 def _clean_lines(text: str) -> list[str]:
     text = text.replace(" ", " ").replace("\r", "")
+    # Extraction artifacts: "1- ին" -> "1-ին", "( այսուհետ" -> "(այսուհետ".
+    text = re.sub(r"(\d)- (?=[Ա-և])", r"\1-", text)
+    text = re.sub(r"\( +", "(", text)
+    text = re.sub(r" +\)", ")", text)
     lines = [re.sub(r"[ \t]+", " ", ln).strip() for ln in text.split("\n")]
     return [ln for ln in lines if ln]
 
