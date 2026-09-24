@@ -1,9 +1,8 @@
-__pycache__/
-*.pyc
-*.egg-info/
-.venv/
-.pytest_cache/
-.env
+bin/
+obj/
+.vs/
+*.user
 data/index/
 data/raw/*
 !data/raw/.gitkeep
+!data/raw/150003.pdf
