@@ -49,7 +49,7 @@ public class RetrievalTests
             if (c.TryGetProperty("query", out var q)) yield return [q.GetString()!];
     }
 
-    private static readonly Lazy<SearchIndex> Reference = new(() => new SearchIndex(TestData.ReferenceChunks()));
+    private static readonly Lazy<SearchIndex> Reference = new(() => new SearchIndex(TestData.ReferenceChunks(), stem: false));
 
     /// <summary>Same chunks, same query: rankings and scores must match the Python implementation.</summary>
     [Theory]

@@ -31,15 +31,20 @@ public sealed partial class SearchIndex
     public IReadOnlyList<Chunk> Chunks { get; }
     public int ArticleCount => _byArticle.Count;
 
-    public SearchIndex(IReadOnlyList<Chunk> chunks)
+    private readonly bool _stem;
+
+    /// <param name="stem">Reduce Armenian words to their stems for the word-level ranking
+    /// (տույժի, տույժերը → տույժ). Off reproduces the original Python ranking exactly.</param>
+    public SearchIndex(IReadOnlyList<Chunk> chunks, bool stem = true)
     {
         Chunks = chunks;
+        _stem = stem;
         var texts = chunks.Select(DocText).ToList();
-        _bm25 = new Bm25(texts.Select(Tokenize).ToList());
+        _bm25 = new Bm25(texts.Select(WordsFor).ToList());
         _body = new CharTfidf(texts);
         // Article titles are short and precise; ranking them separately keeps a
         // matching title from being drowned out by long, term-heavy articles.
-        _titles = new CharTfidf(chunks.Select(c => c.Title).ToList());
+        _titles = new CharTfidf(chunks.Select(c => TitleText(c.Title)).ToList());
         for (var i = 0; i < chunks.Count; i++)
         {
             if (chunks[i].Article is not { } a) continue;
@@ -54,6 +59,20 @@ public sealed partial class SearchIndex
             .Where(t => t.Length > 1 || char.IsDigit(t[0]))
             .ToList();
 
+    // Stemmed titles let "տույժերը" (title) match "տույժի" (question).
+    private string TitleText(string text) =>
+        _stem ? string.Join(' ', Tokenize(text).Select(ArmenianStemmer.Stem)) : text;
+
+    private List<string> WordsFor(string text) =>
+        _stem ? Tokenize(text).Select(ArmenianStemmer.Stem).ToList() : Tokenize(text);
+
+    /// <summary>
+    /// Removes the Armenian question, exclamation and emphasis marks (՞ ՜ ՛), which are
+    /// written inside words: "Կարո՞ղ" must search as "Կարող", not as "Կարո" + "ղ".
+    /// </summary>
+    public static string StripArmenianMarks(string text) =>
+        text.Replace("\u055E", "").Replace("\u055C", "").Replace("\u055B", "");
+
     public static List<string> FindArticleRefs(string text) =>
         ArticleRefRe().Matches(text).Select(m => m.Groups[1].Value).ToList();
 
@@ -64,7 +83,7 @@ public sealed partial class SearchIndex
 
     public List<Hit> Search(string query, int k = 8, IEnumerable<string>? extraQueries = null)
     {
-        var queries = new List<string> { query };
+        var queries = new List<string> { StripArmenianMarks(query) };
         queries.AddRange((extraQueries ?? []).Where(q => !string.IsNullOrWhiteSpace(q)));
 
         var rankings = new List<int[]>();
@@ -78,9 +97,9 @@ public sealed partial class SearchIndex
 
         foreach (var q in queries)
         {
-            Add(_bm25.Scores(Tokenize(q)));
+            Add(_bm25.Scores(WordsFor(q)));
             Add(_body.Scores(q));
-            Add(_titles.Scores(q));
+            Add(_titles.Scores(TitleText(q)));
         }
 
         var fused = new double[Chunks.Count];

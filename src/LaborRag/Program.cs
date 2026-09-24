@@ -1,4 +1,3 @@
-using Anthropic;
 using LaborRag;
 using LaborRag.Core;
 
@@ -6,8 +5,7 @@ using LaborRag.Core;
 //   ingest <files/dirs...>   parse .txt/.html/.pdf/.docx and build the index
 //   search <query> [-k N] [--rewrite] [--full]
 //   article <number>
-//   ask <question> [-k N] [--no-rewrite] [--show-context]
-//   chat [-k N] [--no-rewrite]
+//   ask <question>           the provisions that best answer the question
 //   serve                    web interface (default when no command is given)
 var argList = args.ToList();
 var indexDir = TakeOption(argList, "--index") ?? Environment.GetEnvironmentVariable("LABOR_RAG_INDEX") ?? "data/index";
@@ -20,22 +18,19 @@ try
     switch (command)
     {
         case "serve":
-            var settings = WebSettings.FromEnvironment() with { IndexDir = indexDir };
             IndexStore.Load(indexDir); // fail fast if the index is missing
-            await WebApp.Build(argList.ToArray(), settings).RunAsync();
+            await WebApp.Build(argList.ToArray(), indexDir).RunAsync();
             return 0;
         case "ingest":
             return Cli.Ingest(argList, indexDir);
         case "search":
-            return await Cli.SearchAsync(argList, indexDir);
+            return Cli.Search(argList, indexDir);
         case "article":
             return Cli.Article(argList, indexDir);
         case "ask":
-            return await Cli.AskAsync(argList, indexDir);
-        case "chat":
-            return await Cli.ChatAsync(argList, indexDir);
+            return Cli.Ask(argList, indexDir);
         default:
-            Console.Error.WriteLine($"Unknown command '{command}'. Commands: ingest, search, article, ask, chat, serve.");
+            Console.Error.WriteLine($"Unknown command '{command}'. Commands: ingest, search, article, ask, serve.");
             return 2;
     }
 }
@@ -80,14 +75,14 @@ namespace LaborRag
             return 0;
         }
 
-        public static async Task<int> SearchAsync(List<string> args, string indexDir)
+        public static int Search(List<string> args, string indexDir)
         {
             var k = IntOption(args, "-k", 8);
-            var rewrite = Flag(args, "--rewrite");
             var full = Flag(args, "--full");
             if (args.Count == 0) return Usage("search <query>");
+            var query = string.Join(' ', args);
             var index = new SearchIndex(IndexStore.Load(indexDir));
-            PrintHits(await RetrieveAsync(index, string.Join(' ', args), k, rewrite), full);
+            PrintHits(index.Search(query, k, Glossary.Expand(query)), full);
             return 0;
         }
 
@@ -111,56 +106,25 @@ namespace LaborRag
             return 0;
         }
 
-        public static async Task<int> AskAsync(List<string> args, string indexDir)
+        public static int Ask(List<string> args, string indexDir)
         {
-            var k = IntOption(args, "-k", 8);
-            var rewrite = !Flag(args, "--no-rewrite");
-            var showContext = Flag(args, "--show-context");
             if (args.Count == 0) return Usage("ask <question>");
             var question = string.Join(' ', args);
-            var index = new SearchIndex(IndexStore.Load(indexDir));
-            var hits = await RetrieveAsync(index, question, k, rewrite);
-            if (showContext) PrintHits(hits, false);
-            PrintAnswer(await Assistant().AnswerAsync(question, hits, []));
-            return 0;
-        }
-
-        public static async Task<int> ChatAsync(List<string> args, string indexDir)
-        {
-            var k = IntOption(args, "-k", 8);
-            var rewrite = !Flag(args, "--no-rewrite");
-            var index = new SearchIndex(IndexStore.Load(indexDir));
-            var assistant = Assistant();
-            var history = new List<Turn>();
-            Console.WriteLine("Labor Code of RA — ask a question (empty line or Ctrl-D to exit).");
-            while (true)
+            var result = PassageFinder.Answer(new SearchIndex(IndexStore.Load(indexDir)), question);
+            if (result.Expansions.Count > 0) Console.WriteLine($"(searched also for: {string.Join(", ", result.Expansions)})");
+            if (result.Passages.Count == 0)
             {
-                Console.Write("\n> ");
-                var q = Console.ReadLine()?.Trim();
-                if (string.IsNullOrEmpty(q)) break;
-                var hits = await RetrieveAsync(index, q, k, rewrite);
-                var answer = await assistant.AnswerAsync(q, hits, history);
-                PrintAnswer(answer);
-                history.Add(new Turn("user", q));
-                history.Add(new Turn("assistant", answer.Text));
-                if (history.Count > 12) history.RemoveRange(0, history.Count - 12);
+                Console.WriteLine("No matching provisions found.");
+                return 0;
             }
-            return 0;
-        }
-
-        private static IAssistant Assistant() =>
-            new ClaudeAssistant(new AnthropicClient(), AssistantOptions.FromEnvironment());
-
-        private static async Task<List<Hit>> RetrieveAsync(SearchIndex index, string question, int k, bool rewrite)
-        {
-            var extra = new List<string>();
-            if (rewrite)
+            foreach (var p in result.Passages)
             {
-                var plan = await Assistant().RewriteQueryAsync(question);
-                extra.AddRange(plan.Queries);
-                extra.AddRange(plan.ArticleRefs.Select(n => $"Հոդված {n}"));
+                Console.WriteLine($"\n{p.Chunk.Heading}");
+                if (p.Context is not null) Console.WriteLine($"  [{p.Context}]");
+                Console.WriteLine($"  «{p.Text.Replace("\n", "\n   ")}»");
             }
-            return index.Search(question, k, extra);
+            Console.WriteLine("\nRelated articles: " + string.Join(", ", result.Articles.Select(h => h.Chunk.Article ?? "preamble").Distinct()));
+            return 0;
         }
 
         private static void PrintHits(IEnumerable<Hit> hits, bool full)
@@ -172,20 +136,6 @@ namespace LaborRag
                 var body = h.Chunk.Text.Replace('\n', ' ');
                 if (!full && body.Length > 300) body = body[..297] + "...";
                 Console.WriteLine($"       {body}");
-            }
-        }
-
-        private static void PrintAnswer(Answer answer)
-        {
-            Console.WriteLine();
-            Console.WriteLine(answer.Text);
-            if (answer.Citations.Count == 0) return;
-            Console.WriteLine("\nSources:");
-            for (var i = 0; i < answer.Citations.Count; i++)
-            {
-                var quote = answer.Citations[i].CitedText.Replace('\n', ' ');
-                if (quote.Length > 200) quote = quote[..197] + "...";
-                Console.WriteLine($"  [{i + 1}] {answer.Citations[i].Heading}: «{quote}»");
             }
         }
 

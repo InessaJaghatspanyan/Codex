@@ -6,10 +6,3 @@ services:
     plan: free
     dockerfilePath: ./Dockerfile
     healthCheckPath: /api/info
-    envVars:
-      - key: ANTHROPIC_API_KEY
-        sync: false # you paste your key in the Render dashboard
-      - key: DAILY_QUESTION_LIMIT
-        value: "200"
-      - key: LABOR_RAG_MODEL
-        value: claude-opus-5

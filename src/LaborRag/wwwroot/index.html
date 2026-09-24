@@ -61,18 +61,11 @@ form.ask textarea:focus, form.ask input:focus { outline: 2px solid var(--accent)
 #feed { margin: 20px 0 60px; display: flex; flex-direction: column; gap: 16px; }
 .card { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; }
 .q { font-weight: 600; margin-bottom: 10px; }
-.answer p { margin: .5em 0; }
-.answer ul, .answer ol { padding-left: 1.4em; margin: .5em 0; }
-.answer h3, .answer h4 { margin: .8em 0 .3em; font-size: 1rem; }
-sup.cite button {
-  font-size: .7rem; border: 1px solid var(--accent); color: var(--accent); background: var(--accent-soft);
-  border-radius: 4px; padding: 0 4px; margin: 0 1px; cursor: pointer; line-height: 1.4;
-}
+.passages { margin: 0; padding-left: 1.4em; display: flex; flex-direction: column; gap: 12px; }
+.passages .h { font-weight: 600; text-align: left; }
+.ctx { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+blockquote { margin: 6px 0 0; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 6px 6px 0; white-space: pre-line; }
 .section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin: 16px 0 6px; }
-.sources { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
-.sources li { border-left: 3px solid var(--border); padding: 4px 10px; font-size: .9rem; }
-.sources li.flash { border-left-color: var(--accent); background: var(--accent-soft); }
-.sources .quote { color: var(--muted); }
 details.hits summary { cursor: pointer; color: var(--muted); font-size: .9rem; margin-top: 12px; }
 .hit { border-top: 1px solid var(--border); padding: 10px 0; }
 .hit:first-of-type { border-top: 0; }
@@ -138,19 +131,12 @@ mark { background: var(--mark); color: inherit; border-radius: 2px; }
 <script>
 const $ = (s) => document.querySelector(s);
 const feed = $("#feed"), q = $("#q"), form = $("#form"), go = $("#go");
-let mode = "ask", llmAvailable = true, authRequired = false, history = [];
-const CODE_KEY = "labor-rag-access-code";
-let accessCode = "";
-try { accessCode = localStorage.getItem(CODE_KEY) || ""; } catch {}
-function saveCode(code) {
-  accessCode = code;
-  try { code ? localStorage.setItem(CODE_KEY, code) : localStorage.removeItem(CODE_KEY); } catch {}
-}
+let mode = "ask";
 
 const EXAMPLES = {
   ask: [
     "Քանի՞ օր է ամենամյա նվազագույն արձակուրդը",
-    "Որքա՞ն ժամկետ առաջ պետք է գործատուն ծանուցի աշխատանքից ազատելու մասին",
+    "Կարո՞ղ է գործատուն ազատել հղի կնոջը",
     "How is overtime work paid?",
     "Какова продолжительность испытательного срока?",
   ],
@@ -159,48 +145,35 @@ const EXAMPLES = {
 };
 const PLACEHOLDER = {
   ask: "Գրեք ձեր հարցը… / Ask in Armenian, English or Russian",
-  search: "Որոնման բառեր հայերենով…",
+  search: "Որոնման բառեր…",
   article: "Հոդվածի համար, օր.՝ 139",
 };
-const BUTTON = { ask: "Ուղարկել", search: "Որոնել", article: "Բացել" };
+const BUTTON = { ask: "Հարցնել", search: "Որոնել", article: "Բացել" };
 
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
-// Tiny Markdown subset: headings, lists, bold/italic, paragraphs, citation markers.
-function renderAnswer(md, cardId) {
-  const inline = (s) => esc(s)
-    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1<em>$2</em>")
-    .replace(/((?:\[\d+\])+)/g, (m) =>
-      '<sup class="cite">' + m.match(/\d+/g).map((n) =>
-        `<button type="button" data-card="${cardId}" data-n="${n}">${n}</button>`).join("") + "</sup>");
-  const out = [];
-  let list = null;
-  const close = () => { if (list) { out.push(`</${list}>`); list = null; } };
-  for (const raw of md.split("\n")) {
-    const line = raw.trimEnd();
-    let m;
-    if (!line.trim()) { close(); continue; }
-    if ((m = line.match(/^#{1,6}\s+(.*)/))) { close(); out.push(`<h4>${inline(m[1])}</h4>`); continue; }
-    if ((m = line.match(/^\s*[-*•]\s+(.*)/))) {
-      if (list !== "ul") { close(); out.push("<ul>"); list = "ul"; }
-      out.push(`<li>${inline(m[1])}</li>`); continue;
-    }
-    if ((m = line.match(/^\s*\d+[.)]\s+(.*)/))) {
-      if (list !== "ol") { close(); out.push("<ol>"); list = "ol"; }
-      out.push(`<li>${inline(m[1])}</li>`); continue;
-    }
-    close(); out.push(`<p>${inline(line)}</p>`);
+// Words are compared by their first five letters, so inflected forms still match
+// (արձակուրդի ~ արձակուրդը). Very common words are not highlighted.
+const WORD = /([\p{L}\p{N}]+)/u;
+const STOP = new Set(["սույն", "համար", "մասին", "կարող", "պետք", "դեպքո", "հոդվա", "օրենս", "which", "what", "that", "this", "with", "какова", "каков", "котор"]);
+const stem = (w) => w.toLowerCase().slice(0, 5);
+function stemsOf(texts) {
+  const set = new Set();
+  for (const t of texts) for (const w of t.split(WORD).filter((x, i) => i % 2 === 1)) {
+    if (w.length >= 4 && !STOP.has(stem(w))) set.add(stem(w));
   }
-  close();
-  return out.join("");
+  return set;
+}
+function highlight(text, stems) {
+  return text.split(WORD).map((part, i) =>
+    i % 2 === 1 && part.length >= 4 && stems.has(stem(part)) ? `<mark>${esc(part)}</mark>` : esc(part)).join("");
 }
 
 function hitsHtml(hits, open = false) {
   if (!hits.length) return '<p class="meta">Համապատասխան հոդվածներ չեն գտնվել։</p>';
-  return `<details class="hits"${open ? " open" : ""}><summary>Գտնված հոդվածներ (${hits.length})</summary>` +
+  return `<details class="hits"${open ? " open" : ""}><summary>Առնչվող հոդվածներ · Related articles (${hits.length})</summary>` +
     hits.map((h) => `<div class="hit">
       <button type="button" class="link h" data-article="${esc(h.article || "")}">${esc(h.heading)}</button>
       ${h.chapter ? `<div class="c">${esc(h.chapter)}</div>` : ""}
@@ -211,68 +184,37 @@ function hitsHtml(hits, open = false) {
 function addCard(title) {
   const card = document.createElement("div");
   card.className = "card";
-  card.id = "c" + Date.now() + Math.random().toString(16).slice(2, 6);
   card.innerHTML = `<div class="q">${esc(title)}</div><div class="loading"><span class="spinner"></span><span>Որոնում եմ…</span></div>`;
   feed.prepend(card);
   return card;
 }
 
 async function api(path, body) {
-  const headers = { "Content-Type": "application/json" };
-  if (accessCode) headers["x-access-code"] = accessCode;
-  const res = await fetch(path, body ? { method: "POST", headers, body: JSON.stringify(body) } : { headers });
-  const data = res.status === 204 ? {} : await res.json().catch(() => ({}));
-  if (!res.ok) {
-    const err = new Error(data.detail ? (typeof data.detail === "string" ? data.detail : JSON.stringify(data.detail)) : res.statusText);
-    err.status = res.status;
-    if (res.status === 401) { saveCode(""); showCodeForm("Մուտքի կոդը սխալ է։ · Invalid access code."); }
-    throw err;
-  }
+  const res = await fetch(path, body
+    ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+    : undefined);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(typeof data.detail === "string" ? data.detail : res.statusText);
   return data;
-}
-
-function showCodeForm(message) {
-  $("#banner").innerHTML = `<form class="banner" id="code-form">
-    <label for="code">Հարցեր տալու համար մուտքագրեք մուտքի կոդը · Enter the access code to ask questions</label>
-    <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-      <input id="code" type="password" autocomplete="current-password" style="flex:1;min-width:0;padding:8px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg)">
-      <button class="btn" type="submit" style="padding:8px 14px">Մուտք</button>
-    </div>
-    ${message ? `<p class="error" style="margin:8px 0 0">${esc(message)}</p>` : ""}
-    <p class="hint">Որոնումն ու հոդվածները հասանելի են առանց կոդի։ · Search and articles work without a code.</p>
-  </form>`;
-  $("#code-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const code = $("#code").value.trim();
-    if (!code) return;
-    saveCode(code);
-    try {
-      await api("/api/auth", {});
-      $("#banner").innerHTML = "";
-      setMode("ask");
-    } catch (err) {
-      if (err.status !== 401) showCodeForm(err.message);
-    }
-  });
 }
 
 async function doAsk(text) {
   const card = addCard(text);
-  card.querySelector(".loading span:last-child").textContent = "Պատասխանը պատրաստվում է…";
   try {
-    if (authRequired && !accessCode) { showCodeForm(); throw new Error("Մուտքի կոդը անհրաժեշտ է։ · Access code required."); }
-    const data = await api("/api/ask", { question: text, history });
-    card.citations = data.citations;
-    const sources = data.citations.length ? `<div class="section-title">Աղբյուրներ</div><ul class="sources">` +
-      data.citations.map((c) => `<li data-n="${c.n}">[${c.n}]
-        <button type="button" class="link" data-article="${esc(c.article || "")}" data-quote="${esc(c.text)}">${esc(c.heading)}</button>
-        <span class="quote">— «${esc(c.text.length > 220 ? c.text.slice(0, 220) + "…" : c.text)}»</span></li>`).join("") + "</ul>" : "";
+    const data = await api("/api/ask", { question: text });
+    const stems = stemsOf([text, ...data.expansions]);
+    const passages = data.passages.length
+      ? `<div class="section-title">Առավել համապատասխան դրույթներ · Most relevant provisions</div><ol class="passages">` +
+        data.passages.map((p) => `<li>
+          <button type="button" class="link h" data-article="${esc(p.article || "")}" data-quote="${esc(p.text.split("\n")[0])}">${esc(p.heading)}</button>
+          ${p.context ? `<div class="ctx">${esc(p.context)}</div>` : ""}
+          <blockquote>${highlight(p.text, stems)}</blockquote>
+        </li>`).join("") + "</ol>"
+      : '<p class="meta">Համապատասխան դրույթներ չեն գտնվել։ Փորձեք այլ բառերով։ · Nothing matched; try other words.</p>';
     card.innerHTML = `<div class="q">${esc(text)}</div>
-      <div class="answer">${renderAnswer(data.answer, card.id)}</div>
-      ${sources}${hitsHtml(data.hits)}
-      <p class="disclaimer">Տեղեկատվական նպատակով է, իրավաբանական խորհրդատվություն չէ։ Ստուգեք arlis.am-ի պաշտոնական տեքստով։</p>`;
-    history.push({ role: "user", content: text }, { role: "assistant", content: data.answer });
-    history = history.slice(-12);
+      ${data.expansions.length ? `<p class="meta">Որոնվել է նաև՝ ${esc(data.expansions.join(", "))}</p>` : ""}
+      ${passages}${hitsHtml(data.hits)}
+      <p class="disclaimer">Սրանք օրենսգրքի մեջբերումներ են՝ գտնված ավտոմատ որոնմամբ, և իրավաբանական խորհրդատվություն չեն։ Ստուգեք arlis.am-ի պաշտոնական տեքստով։</p>`;
   } catch (e) {
     card.innerHTML = `<div class="q">${esc(text)}</div><p class="error">${esc(e.message)}</p>`;
   }
@@ -351,17 +293,8 @@ $("#examples").addEventListener("click", (e) => {
 $("#d-close").addEventListener("click", closeDrawer);
 document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDrawer(); });
 
-// Citation markers flash their source line; article links open the drawer.
+// Article links (in results and the related list) open the article drawer.
 feed.addEventListener("click", (e) => {
-  const cite = e.target.closest("sup.cite button");
-  if (cite) {
-    const card = document.getElementById(cite.dataset.card);
-    const li = card.querySelector(`.sources li[data-n="${cite.dataset.n}"]`);
-    const c = (card.citations || []).find((x) => String(x.n) === cite.dataset.n);
-    if (li) { li.classList.add("flash"); setTimeout(() => li.classList.remove("flash"), 1500); }
-    if (c) openArticle(c.article, c.text);
-    return;
-  }
   const link = e.target.closest("[data-article]");
   if (link) openArticle(link.dataset.article, link.dataset.quote);
 });
@@ -370,15 +303,6 @@ feed.addEventListener("click", (e) => {
   try {
     const info = await api("/api/info");
     $("#meta").textContent = `${info.articles} հոդված` + (info.version ? ` · խմբագրություն ${info.version}` : "");
-    llmAvailable = info.llm;
-    authRequired = Boolean(info.auth);
-    if (llmAvailable && authRequired && !accessCode) showCodeForm();
-    if (!llmAvailable) {
-      $("#banner").innerHTML = `<div class="banner">ANTHROPIC_API_KEY-ը կարգավորված չէ․ հասանելի է միայն որոնումը։
-        Set ANTHROPIC_API_KEY on the server to enable answers.</div>`;
-      setMode("search");
-      return;
-    }
   } catch (e) {
     $("#banner").innerHTML = `<div class="banner">${esc(e.message)}</div>`;
   }

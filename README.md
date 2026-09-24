@@ -1,31 +1,34 @@
-# Labor Code of RA — RAG (.NET)
+# Labor Code of RA — search and Q&A (.NET)
 
-Question answering over the **Labor Code of the Republic of Armenia**
-(ՀՀ աշխատանքային օրենսգիրք), with answers grounded in, and cited to, specific articles.
-Built with C# / .NET 8, ASP.NET Core and the official Anthropic C# SDK.
+Ask questions about the **Labor Code of the Republic of Armenia**
+(ՀՀ աշխատանքային օրենսգիրք) and get back the exact provisions of the Code that answer
+them, each linked to its article. Built with C# / .NET 8 and ASP.NET Core. It uses no AI
+service and no API keys, so it costs nothing to run beyond hosting.
 
 ```
-question ──► Claude query rewrite ──► hybrid retrieval ──► Claude answer with citations
-             (→ Armenian legal terms)   BM25 + char n-grams     (cites Հոդված N)
+question ──► glossary (EN/RU → Armenian terms) ──► hybrid article search ──► best-matching provisions
+                                                    BM25 + char n-grams        quoted, with their article
 ```
 
-- **Article-level chunking.** The Code is split on `Հոդված N.` headings, keeping each
-  article's Section/Chapter. Long articles are split at numbered parts. English
-  (`Article`) and Russian (`Статья`) translations are parsed too.
+- **Article-level index.** The Code is split on `Հոդված N.` headings, keeping each
+  article's Section/Chapter. English (`Article`) and Russian (`Статья`) translations are
+  parsed too.
 - **Clean PDF extraction.** Lines are rebuilt from glyph positions. The loader removes the
   arlis.am/IRTEK page footers and page numbers, moves the first-page metadata box to the
   preamble, rejoins hard-wrapped lines, and drops the doubled glyphs that the PDF uses to
   fake bold text.
-- **Retrieval designed for Armenian.** Armenian words are heavily inflected
-  (աշխատող / աշխատողի / աշխատողների), so word-level BM25 is combined with character
-  n-gram TF-IDF over article text and titles, which matches across endings without a
-  stemmer. The rankings are merged with reciprocal rank fusion. Mentioning an article
-  (`հոդված 139`, `article 139`, `ст. 139`) always pulls that article in.
-- **Questions in any language.** Claude rewrites the question into Armenian legal search
-  terms before retrieval, so English or Russian questions still match the Armenian text.
-- **Cited answers.** The retrieved articles are passed to Claude as documents with
-  citations enabled. Each answer links to the articles and the exact sentences it relied
-  on, and Claude is told to say so when the retrieved text doesn't answer the question.
+- **Search designed for Armenian.** Armenian words are heavily inflected
+  (աշխատող / աշխատողի / աշխատողների). Word matching uses a light Armenian stemmer and is
+  combined with character n-gram TF-IDF over article text and titles; the rankings are
+  merged with reciprocal rank fusion. Mentioning an article (`հոդված 139`, `article 139`,
+  `ст. 139`) always pulls that article in.
+- **Answers are quotes.** The best articles are split into provisions (numbered parts, list
+  items with the sentence that introduces them, sentences of long paragraphs), and the
+  provisions that best match the question are shown with the matching words highlighted.
+  Clicking one opens the full article at that provision.
+- **English and Russian questions** work through a built-in glossary of about 50 labor-law
+  terms (vacation/отпуск → արձակուրդ, overtime/сверхурочные → արտաժամյա աշխատանք, …).
+  Armenian questions match best.
 
 ## Deploy to Render
 
@@ -34,20 +37,12 @@ The repo includes a `Dockerfile` and a `render.yaml` Blueprint. The Docker build
 
 1. Open **https://render.com/deploy?repo=https://github.com/InessaJaghatspanyan/Codex**
    and sign in to Render (a GitHub login works).
-2. Render reads `render.yaml` and asks for **`ANTHROPIC_API_KEY`**. Paste your key
-   from console.anthropic.com.
-3. Click **Apply**. The first build takes a few minutes. The site is then live at
+2. Click **Apply**. The first build takes a few minutes. The site is then live at
    `https://labor-code-ra.onrender.com`, or a similar name if that one is taken.
 
-Anyone with the link can search, read articles and ask questions. Each IP address can ask
-10 questions a minute, and `DAILY_QUESTION_LIMIT` (default 200) caps the total number of
-questions per day, which bounds your Anthropic costs. To restrict questions to people you
-choose, set an `ACCESS_CODE` in the service's **Environment** tab; the page then asks
-for that code before answering.
-
-The free Render plan sleeps after 15 minutes without traffic, so the first visit after a
-pause takes about a minute. The paid Starter plan keeps it running. Pushing to the
-repository redeploys automatically.
+No settings or keys are needed. Pushing to the repository redeploys automatically. The
+free Render plan sleeps after 15 minutes without traffic, so the first visit after a
+pause takes about a minute; the paid Starter plan keeps it running.
 
 ## Run locally
 
@@ -58,17 +53,14 @@ dotnet build
 alias laborrag="dotnet src/LaborRag/bin/Debug/net8.0/laborrag.dll"
 
 laborrag ingest data/raw/                  # Parsed 291 chunks covering 288 articles.
-export ANTHROPIC_API_KEY=...
-
 laborrag ask "Քանի՞ օր է ամենամյա նվազագույն արձակուրդը"
-laborrag ask "What notice must an employer give before dismissing an employee?" --show-context
-laborrag chat                              # interactive, keeps follow-up context
-laborrag search "աշխատանքային պայմանագրի լուծում" -k 5   # retrieval only, free
+laborrag ask "How is overtime work paid?"
+laborrag search "աշխատանքային պայմանագրի լուծում" -k 5
 laborrag article 139
 laborrag serve                             # web interface on http://localhost:5000
 ```
 
-Or with Docker: `docker build -t labor-code-ra . && docker run -p 8080:8080 -e ANTHROPIC_API_KEY=... labor-code-ra`.
+Or with Docker: `docker build -t labor-code-ra . && docker run -p 8080:8080 labor-code-ra`.
 
 ## The text of the Code
 
@@ -82,35 +74,26 @@ and push. Render then rebuilds the index. Local runs need `laborrag ingest data/
 
 | Env var | Default | Purpose |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | none | Required for answers; without it only search works |
-| `ACCESS_CODE` | unset (open) | Optional code required to ask questions in the web interface |
-| `DAILY_QUESTION_LIMIT` | `200` | Maximum questions per UTC day (cost guard) |
-| `LABOR_RAG_MODEL` | `claude-opus-5` | Model that writes answers |
-| `LABOR_RAG_REWRITE_MODEL` | same as above | Model that rewrites queries (a cheaper model works well here) |
-| `LABOR_RAG_EFFORT` | `high` | Answer effort: `low`, `medium`, `high`, `xhigh` or `max` |
 | `LABOR_RAG_INDEX` | `data/index` | Index directory (or `--index`) |
 | `PORT` | none | Port to listen on (set by Render) |
-
-Answers are requested with server-side refusal fallbacks (`fallbacks: "default"`), so
-if the primary model declines a request, the API reruns it on a fallback model.
 
 ## Layout
 
 ```
-src/LaborRag.Core/     library: text loading (PDF/HTML/DOCX), article parser,
-                       hybrid search, index storage, Claude calls, prompts.json
+src/LaborRag.Core/     library: text loading (PDF/HTML/DOCX), article parser, hybrid
+                       search, Armenian stemmer, EN/RU glossary, provision finder
 src/LaborRag/          the `laborrag` app: CLI commands + ASP.NET Core web API
   wwwroot/index.html   the web page (plain HTML/CSS/JS, no build step)
-tests/LaborRag.Tests/  xUnit tests; Data/ holds the synthetic sample and reference
-                       output from the original Python implementation
+tests/LaborRag.Tests/  xUnit tests; Data/ holds a synthetic sample and reference output
+                       from the original Python implementation
 Dockerfile, render.yaml
 ```
 
-Run the tests with `dotnet test`. The search tests check that rankings and scores match
-the original Python implementation exactly on 20 reference queries. The parser tests
-check the real PDF against the Python parser's output article by article.
+Run the tests with `dotnet test`. They include questions in all three languages checked
+against the real Code (for example, the annual-leave question must quote Article 159's
+"20 աշխատանքային օր"), and parser checks against the real PDF.
 
 ## Disclaimer
 
-This tool provides legal information, not legal advice. Always check answers against the
-official text on arlis.am.
+This tool shows quotes from the Code found by automatic search; it is not legal advice.
+Always check against the official text on arlis.am.
